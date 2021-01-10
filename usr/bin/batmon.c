@@ -20,17 +20,17 @@
 #include <signal.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <sys/time.h>
 #include <math.h>
 
- #define DAEMON_NAME "Battery monitor daemon"
- #define true 1
- #define false 0
- #define SHARED_MEMORY_KEY 1998
- #define SHARED_MEMORY_KEY_MPP 1999 
- #define SHARED_MEMORY_KEY_BMS 1997 
- 
- #define TIME_INTEGRAL 60
+#define DAEMON_NAME "Battery monitor daemon"
+#define true 1
+#define false 0
+#define SHARED_MEMORY_KEY 1998
+#define SHARED_MEMORY_KEY_MPP 1999 
+#define SHARED_MEMORY_KEY_BMS 1997 
 
+#define TIME_INTEGRAL 60
 
 struct timeval tv1,tv2,dtv;
 
@@ -38,24 +38,28 @@ float ocv[101], v_bms[32];
 float estimated_soc=-1, ah_accumulator=0, U_min_bms_avg=0, U_invalid_min=0, U_invalid_max=0; 
 int bms_number=0;
 
-void time_start() { gettimeofday(&tv1, &timezone); }
+void time_start() 
+{ 
+	gettimeofday(&tv1, &timezone); 
+}
 
 long time_stop()
+{
+	gettimeofday(&tv2, &timezone);
 
-{ gettimeofday(&tv2, &timezone);
+	dtv.tv_sec = tv2.tv_sec - tv1.tv_sec;
 
-  dtv.tv_sec= tv2.tv_sec -tv1.tv_sec;
-  
-    dtv.tv_usec=tv2.tv_usec-tv1.tv_usec;
-    
-      if(dtv.tv_usec<0) { dtv.tv_sec--; dtv.tv_usec+=1000000; }
-      
-        return dtv.tv_sec*1000+dtv.tv_usec/1000;
-        
-        }
+	dtv.tv_usec = tv2.tv_usec - tv1.tv_usec;
+
+	if (dtv.tv_usec < 0)
+	{
+		dtv.tv_sec--;
+		dtv.tv_usec += 1000000;
+	}
+
+	return dtv.tv_sec * 1000 + dtv.tv_usec / 1000;
+}
 //-------------------------------------------------------------------------
-
-
 
 void signal_hdl(int sig, siginfo_t *siginfo, void *context)
   {
@@ -388,8 +392,8 @@ i=1;
 	bzero(v_bms,32);
 	bzero(ocv,101); // fill OCV array with 0. index - capacity in %. value - voltage. 0 - no data
 
-
-	mysql.reconnect=true;
+	// error: no member named 'reconnect' in 'struct st_mysql'
+	// mysql.reconnect=true;
 	mysql_init(&mysql);  
 	if (mysql_real_connect(&mysql,"localhost","monitor","energy","battery",0,NULL,0)==NULL)
     {
@@ -423,36 +427,39 @@ i=1;
 
 //---------------------------------------------------------------
 	    sprintf(query,"SELECT * FROM battery_state WHERE number=1");
-    	    if (mysql_query(&mysql,query))  
-		{ syslog(LOG_ERR,"Error SELECT from MySQL battery_state. Resetting all the variables");
-		    } else {
-    		    result=mysql_store_result(&mysql);
-			if (result)
+	    if (mysql_query(&mysql, query))
+	    {
+		    syslog(LOG_ERR, "Error SELECT from MySQL battery_state. Resetting all the variables");
+	    }
+	    else
+	    {
+		    result = mysql_store_result(&mysql);
+		    if (result)
+		    {
+			    if ((row = mysql_fetch_row(result)))
 			    {
-				if (row=mysql_fetch_row(result)) {
-				
-				
-				battery_state.deepest_discharge=atof(row[1]);
-				battery_state.last_discharge=atof(row[2]);
-				battery_state.average_discharge=atof(row[3]);
-				battery_state.discharge_cycles=atoi(row[4]);
-				battery_state.full_discharges=atoi(row[5]);
-				battery_state.summary_ah=atof(row[6]);
-				battery_state.lowest_voltage=atof(row[7]);
-				battery_state.highest_voltage=atof(row[8]);
-//				sprintf(battery_state.last_charge_date,"%s",row[9]);
-				battery_state.number_autosync=atoi(row[10]);
-				battery_state.E_summary_to_battery=atof(row[11]);
-				battery_state.E_summary_from_battery=atof(row[12]);
-				battery_state.E_from_battery_since_ls=atof(row[13]);
-				battery_state.E_alt_daily=atof(row[14]);
-				battery_state.E_alt_monthly=atof(row[15]);
-				battery_state.E_alt_summ=atof(row[16]);
-				battery_state.E_alt_user=atof(row[17]);
-				mysql_free_result(result);
-			     }
+
+				    battery_state.deepest_discharge = atof(row[1]);
+				    battery_state.last_discharge = atof(row[2]);
+				    battery_state.average_discharge = atof(row[3]);
+				    battery_state.discharge_cycles = atoi(row[4]);
+				    battery_state.full_discharges = atoi(row[5]);
+				    battery_state.summary_ah = atof(row[6]);
+				    battery_state.lowest_voltage = atof(row[7]);
+				    battery_state.highest_voltage = atof(row[8]);
+				    //				sprintf(battery_state.last_charge_date,"%s",row[9]);
+				    battery_state.number_autosync = atoi(row[10]);
+				    battery_state.E_summary_to_battery = atof(row[11]);
+				    battery_state.E_summary_from_battery = atof(row[12]);
+				    battery_state.E_from_battery_since_ls = atof(row[13]);
+				    battery_state.E_alt_daily = atof(row[14]);
+				    battery_state.E_alt_monthly = atof(row[15]);
+				    battery_state.E_alt_summ = atof(row[16]);
+				    battery_state.E_alt_user = atof(row[17]);
+				    mysql_free_result(result);
 			    }
-			}
+		    }
+	    }
 
 //---------------- READ OCV Table --------------------------------
 
@@ -461,25 +468,23 @@ i=1;
     	    if (mysql_query(&mysql,query)) 
 		{ syslog(LOG_ERR,"Error SELECT from MySQL work_table"); return -1;}      
 	      result=mysql_store_result(&mysql);
-	    
-		while (row=mysql_fetch_row(result))
-		    {
-		ocv[atoi(row[0])]=atof(row[1]);
-		    }
-		mysql_free_result(result);
-	    
-//--------------------------------------------------------------
 
+	      while ((row = mysql_fetch_row(result)))
+	      {
+		      ocv[atoi(row[0])] = atof(row[1]);
+	      }
+	      mysql_free_result(result);
 
-//--------------------------------------------------------------
+	      //--------------------------------------------------------------
 
+	      //--------------------------------------------------------------
 
-	pid = fork();
-      if (pid == -1)
-      {
-          syslog(LOG_ERR,"Error: Start Daemon failed (%s)\n");
+	      pid = fork();
+	      if (pid == -1)
+	      {
+		      syslog(LOG_ERR, "Error: Start Daemon failed.\n");
 
-          return -1;
+		      return -1;
       }
       else if (!pid)
       {
@@ -731,7 +736,7 @@ rest_time_counter=ltime;
         	  newtime = localtime (&ltime);
         	  tim = *newtime;
 
-	         sprintf(query, "INSERT INTO battery_cycle VALUES (NULL,'%d-%d-%d','%d:%d:%d','%.3f','%.3f','%.3f','%.2f','%.3f','%.1f','%.2f','%d')",
+	         sprintf(query, "INSERT INTO battery_cycle VALUES (NULL,'%d-%d-%d','%d:%d:%d','%.3f','%.3f','%.3f','%.2f','%.3f','%.1f','%.2f','%lu')",
                  tim.tm_year+1900,tim.tm_mon+1,tim.tm_mday,tim.tm_hour,tim.tm_min,tim.tm_sec,
                  battery_cycle_curr.integral_dCdt, battery_cycle_curr.C_current_Ah,
 		 battery_cycle_curr.C_current_percent, battery_cycle_curr.I_avg,
@@ -825,12 +830,12 @@ rest_time_counter=ltime;
 		 else
 		{      
 	    	result=mysql_store_result(&mysql);
-	    
-		while (row=mysql_fetch_row(result))
-		    {
-		ocv[atoi(row[0])]=atof(row[1]);
-		    }
-		syslog(LOG_NOTICE,"OCV table has been reloaded");     
+
+		while ((row = mysql_fetch_row(result)))
+		{
+			ocv[atoi(row[0])] = atof(row[1]);
+		}
+		syslog(LOG_NOTICE, "OCV table has been reloaded");
 		mysql_free_result(result);
 		    }
 	    
